@@ -1,0 +1,347 @@
+import tkinter
+from tkinter import PhotoImage,messagebox
+from tkinter import filedialog
+import csv
+import os
+
+#background image function
+# Global dictionary to store image references
+image_refs = {}
+def background(files_path, root, key):
+    image_refs[key] = PhotoImage(file=files_path)
+    background_image = tkinter.Label(root, image=image_refs[key])
+    background_image.place(relheight=1, relwidth=1)
+
+
+#file opening function
+#setting gobal file path for using it in other function
+file_path=""
+def openfile(parent_window):
+    global file_path
+    file_path=filedialog.askopenfilename(
+    parent=parent_window,
+    initialdir=r"C:\Users\ASUS\Desktop\vscode\skill high\file encrepytion",
+    title="open file",
+    filetypes=(("text","*.txt"),("ENC file","*.enc"))
+    )
+
+#encrpytion function
+def encrpytion_system(key,path,root1):
+
+    def pad_block(s, size):
+        return s + " " * (size - len(s))
+    def gen_key(k, size=16):
+        return bytearray(pad_block(k, size).encode('utf-8'))
+    def break_into_blocks(message, size):
+        blocks = []
+        for i in range(0, len(message), size):
+            block = message[i:i + size]
+            blocks.append(pad_block(block, size))
+        return blocks
+
+
+    
+    def encrypt1(plain_block, iv):
+        plain_bytes = plain_block.encode('utf-8')
+        padded_plain = plain_bytes.ljust(len(iv), b' ')  # pad with spaces to match IV size
+        return bytearray([padded_plain[i] ^ iv[i] for i in range(len(iv))])
+
+
+    def encrypt2(block, key):
+        return bytearray([block[i] ^ key[i] for i in range(len(block))])
+
+    def encrypt(block_list, iv, key):
+        cipher_list = []
+        for block in block_list:
+            xored_iv = encrypt1(block, iv)
+            cipher_block = encrypt2(xored_iv, key)
+            cipher_list.append(cipher_block)
+            iv = cipher_block  # CBC chaining
+        return cipher_list
+    
+
+    if key=="" or path=="":
+        messagebox.showwarning("warning ","no file selected or no key entered")
+        root1.destroy()
+    else:
+        check=False
+        file_to_find=path+'.enc'
+        with open("key.csv", mode="r", newline='', encoding="utf-8") as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    if row['path'] == file_to_find:
+                        check=True
+                        break
+        if check==True:
+            messagebox.showwarning("Warning","You Have Already Encrpyted The File\nIf You Want To Again Encrpyt\nDelete The Path From Csv File")
+            root1.destroy()
+        else:
+            BLOCK_SIZE = 16
+
+            data = [
+                {"path": path+'.enc', "key":key }
+            ]
+            csv_file="key.csv"
+            file_exists = os.path.isfile(csv_file) and os.path.getsize(csv_file) > 0 #Checking file existing or not
+
+            with open(csv_file, "a", newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=["path", "key"])
+
+                if not file_exists:
+                    writer.writeheader()  # Write header only if the file is new or empty
+
+                writer.writerow(data[0]) 
+
+
+            key=gen_key(key)
+            iv = gen_key("there is no use")
+            with open(path, "r", encoding="utf-8") as f:
+                message = f.read()
+            blocklist = break_into_blocks(message, BLOCK_SIZE)
+            cipher = encrypt(blocklist, iv, key)
+            with open(path+'.enc', "wb") as f:
+                for block in cipher:
+                    f.write(block)
+            messagebox.showinfo("Encrpyted", f"The Encrpyted File Is Saved as {path}.enc")
+            root1.destroy()
+
+
+
+#decrpytion function
+def decrpytion_system(key,path,root1):
+    def pad_block(s, size):
+        return s + " " * (size - len(s))
+
+    def break_into_blocks(message, size):
+        blocks = []
+        for i in range(0, len(message), size):
+            block = message[i:i + size]
+            blocks.append(pad_block(block, size))
+        return blocks
+
+    def gen_key(k, size=16):
+        return bytearray(pad_block(k, size).encode('utf-8'))
+    def decrypt1(cipher_block, key):
+        return bytearray([cipher_block[i] ^ key[i] for i in range(len(cipher_block))])
+
+    def decrypt2(temp, iv):
+        decrypted_bytes = bytearray([temp[i] ^ iv[i] for i in range(len(temp))])
+        return decrypted_bytes.decode('utf-8', errors='ignore')  # or 'replace' if you prefer
+
+    def decrypt(cipher_list, key, iv):
+        decrypted_list = []
+        for i in range(len(cipher_list)):
+            temp = decrypt1(cipher_list[i], key)
+            if i == 0:
+                plain_block = decrypt2(temp, iv)
+            else:
+                plain_block = decrypt2(temp, cipher_list[i - 1])
+            decrypted_list.append(plain_block)
+        return decrypted_list
+
+
+    if key=="" or path=="":
+        messagebox.showwarning("warning ","no file selected or no key entered")
+        root1.destroy()
+    else:
+        if (path.endswith('.enc')):
+            file_to_find=path
+            check_key=None
+            with open("key.csv", mode="r", newline='', encoding="utf-8") as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    if row['path'] == file_to_find:
+                        check_key=row['key']
+                        break
+            if key!=check_key:
+                messagebox.showwarning("warning ","Key Entered Is Wrong")
+            else:
+                BLOCK_SIZE=16
+                key = gen_key(key)
+                iv = gen_key("there is no use")
+                with open(path, "rb") as f:
+                    cipher_data = f.read()
+                cipher_blocks = [bytearray(cipher_data[i:i + BLOCK_SIZE]) for i in range(0, len(cipher_data), BLOCK_SIZE)]
+                decrypted_blocks = decrypt(cipher_blocks, key, iv)
+                decrypted_message = ''.join(decrypted_blocks).rstrip()
+
+                with open(path+'.dnc', "w", encoding="utf-8") as f:
+                    f.write(decrypted_message)
+                messagebox.showinfo("Decrpyted", f"The Decrpyted File Is Saved as {path}.dnc")
+                root1.destroy()
+        else:
+            messagebox.showwarning("Warning","Wrong File Type Selected")
+            root1.destroy()
+
+
+
+def encrpyt_window():
+    root1=tkinter.Toplevel()
+    root1.title("Encrpytion window")
+    root1.geometry("860x404")
+    root1.resizable(False, False)
+
+    image_path2=r"C:\Users\ASUS\Desktop\vscode\skill high\file encrepytion\project\pngtree-digital-matrix-encryption-green-abstract-background-image_770050.png"
+    background(image_path2,root1,"encrpytion")
+
+    #Encrpytion header
+    encrpytion_header=tkinter.Label(
+        root1,
+        text="Encrpytion",
+        font=("Consolas", 28, "bold italic"),
+        width=11,
+        bg="#011c0f",        
+        fg="#00ff99",        
+        borderwidth=0,
+        highlightthickness=0
+        )
+    encrpytion_header.place(relx=0.5, y=30, anchor="n")
+
+    #key entry box
+    key_desc=tkinter.Label(
+        root1,
+        text="Enter Your Key",
+        font=("Consolas",16, "bold italic"),
+        bg="#011c0f",        
+        fg="#00ff99",        
+        borderwidth=0,
+        highlightthickness=0
+        )
+    key_desc.place(relx=0.5, y=100, anchor="n")
+    key_entry=tkinter.Entry(
+        root1,
+        font=("Consolas", 14),
+        width=40
+        )
+    key_entry.place(relx=0.5, y=140, anchor="n")
+
+    #file uploading button
+    file_button=tkinter.Button(
+    root1,
+    text="Select File",
+    font=("georgia",10),
+    command=lambda: openfile(root1)
+    )
+    file_button.place(relx=0.5, y=180, anchor="n")
+
+    #save and encrpytion button
+    save_button=tkinter.Button(
+    root1,
+    text="Save",
+    font=("georgia",13),
+    command=lambda : encrpytion_system(key_entry.get(),file_path,root1)
+    )
+    save_button.place(relx=0.5, y=240, anchor="n")
+
+    
+    root1.mainloop()
+
+
+def decrpyt_window():
+    root1=tkinter.Toplevel()
+    root1.title("Decrpytion window")
+    root1.geometry("860x404")
+    root1.resizable(False, False)
+
+    image_path2=r"C:\Users\ASUS\Desktop\vscode\skill high\file encrepytion\project\pngtree-digital-matrix-encryption-green-abstract-background-image_770050.png"
+    background(image_path2,root1,"decrpytion")
+
+    #Decrpytion header
+    decrpytion_header=tkinter.Label(
+        root1,
+        text="Decrpytion",
+        font=("Consolas", 28, "bold italic"),
+        width=11,
+        bg="#011c0f",        
+        fg="#00ff99",        
+        borderwidth=0,
+        highlightthickness=0
+        )
+    decrpytion_header.place(relx=0.5, y=30, anchor="n")
+
+    #password entry box
+    password_desc=tkinter.Label(
+        root1,
+        text="Enter The Password",
+        font=("Consolas",16, "bold italic"),
+        bg="#011c0f",        
+        fg="#00ff99",        
+        borderwidth=0,
+        highlightthickness=0
+        )
+    password_desc.place(relx=0.5, y=100, anchor="n")
+    password_entry=tkinter.Entry(
+        root1,
+        font=("Consolas", 14),
+        width=40
+        )
+    password_entry.place(relx=0.5, y=140, anchor="n")
+
+    #file uploading button
+    file_button=tkinter.Button(
+    root1,
+    text="Select File",
+    font=("georgia",10),
+    command=lambda: openfile(root1)
+    )
+    file_button.place(relx=0.5, y=180, anchor="n")
+
+    #save and decrpytion button
+    save_button=tkinter.Button(
+    root1,
+    text="Save",
+    font=("georgia",13),
+    command= lambda : decrpytion_system(password_entry.get(),file_path,root1)
+    )
+    save_button.place(relx=0.5, y=240, anchor="n")
+
+
+    root1.mainloop()
+
+
+
+
+
+#Main Window
+root=tkinter.Tk()
+root.title("File Encrpytion And Decryption System")
+root.geometry("860x404")
+root.resizable(False, False)
+
+
+#Background image for 1st window
+image_path1=r"C:\Users\ASUS\Desktop\vscode\skill high\file encrepytion\project\pngtree-digital-code-encryption-dark-blue-technology-background-image_770047.png"
+background(image_path1,root,"main_window")
+
+
+#header
+header = tkinter.Label(
+    root,
+    text="File Encryption And Decryption System",
+    font=("georgia", 26),
+    bg="#021a30",
+    fg="red"
+)
+header.pack(pady=10)
+
+
+#encrpytion_button
+encrpytion_button=tkinter.Button(
+    root,
+    text="Encrpyt",
+    font=("georgia", 14),
+    command=encrpyt_window,
+    width=11)
+encrpytion_button.pack(pady=80)
+
+
+#decrpytion_button
+decrpytion_button=tkinter.Button(
+    root,
+    text="Decrpyt",
+    font=("georgia", 14),
+    command=decrpyt_window,
+    width=11)
+decrpytion_button.pack()
+
+root.mainloop()
